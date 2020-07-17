@@ -98,3 +98,207 @@
 
 
 
+### 5. 코드
+
+1. Watson의 STT 솔루션을 활용하여 사용자의 음성을 텍스트 처리하는 모듈 개발
+
+   - 예시 코드
+
+   ```python
+   from ibm_watson import TextToSpeechV1
+   from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+   
+   authenticator = IAMAuthenticator('{apikey}')
+   text_to_speech = TextToSpeechV1(
+       authenticator=authenticator
+   )
+   
+   text_to_speech.set_service_url('{url}')
+   
+   with open('hello_world.wav', 'wb') as audio_file:
+       audio_file.write(
+           text_to_speech.synthesize(
+               'Hello world',
+               voice='en-US_AllisonV3Voice',
+               accept='audio/wav'        
+           ).get_result().content)
+   ```
+
+   - 수정 코드
+
+   ```python
+   import json
+   from os.path import join, dirname
+   from ibm_watson import SpeechToTextV1
+   from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+   
+   # authenticator 지정
+   def authenticate(k):
+       authenticator = IAMAuthenticator(k)
+       return authenticator
+   
+   def stt(a):
+       speech_to_text = SpeechToTextV1(authenticator=a)
+       return speech_to_text
+   
+   # 얘는 views.py에서 만들기
+   def set_url(stt, api_url):
+       stt.set_service_url(api_url)
+       return stt
+   ```
+
+   ​     
+
+2. STT의 결과를 통해 원하는 키워드 값을 추출하는 모듈 개발
+
+   - 예시 코드
+
+   ```python
+   import json
+   from os.path import join, dirname
+   from ibm_watson import SpeechToTextV1
+   from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+   
+   authenticator = IAMAuthenticator('{apikey}')
+   speech_to_text = SpeechToTextV1(
+       authenticator=authenticator
+   )
+   
+   speech_to_text.set_service_url('{url}')
+   
+   with open(join(dirname(__file__), './.', 'audio-file2.flac'),
+                  'rb') as audio_file:
+       speech_recognition_results = speech_to_text.recognize(
+           audio=audio_file,
+           content_type='audio/flac',
+           word_alternatives_threshold=0.9,
+           keywords=['colorado', 'tornado', 'tornadoes'],
+           keywords_threshold=0.5
+       ).get_result()
+   print(json.dumps(speech_recognition_results, indent=2))
+   ```
+
+   - 수정 코드
+
+   ```python
+   # open 함수화
+   def start_stt(stt, filename):
+       with open(join(dirname(__file__), '../media/timeline_audio', filename), 'rb') as audio_file:
+           speech_recognition_results = stt.recognize(
+           audio=audio_file,
+           content_type='audio/wav',
+           model='en-US_ShortForm_NarrowbandModel',
+           word_alternatives_threshold=0.9,
+       
+           keywords=['\ub54c\ubb38\uc5d0', '\uc790\uafb8'],
+           keywords_threshold=0.5
+       ).get_result()
+       return speech_recognition_results
+   
+   
+   def get_keyword(srr):
+       keyword = dict(srr, indent=2)["results"][0]["alternatives"][0]["transcript"]
+       return keyword
+   ```
+
+   
+
+3. 추출된 키워드 데이터를 Watson의 assistant 솔루션을 활용해 알맞은 데이터를 연결하는 모듈 개발
+
+   - 예시 코드
+
+   ```python
+   import json
+   from ibm_watson import AssistantV2
+   from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+   
+   authenticator = IAMAuthenticator('{apikey}')
+   assistant = AssistantV2(
+       version='2020-04-01',
+       authenticator = authenticator
+   )
+   
+   assistant.set_service_url('{url}')
+   
+   response = assistant.message_stateless(
+       assistant_id='{assistant_id}',
+       input={
+           'message_type': 'text',
+           'text': 'Hello'
+       }
+   ).get_result()
+   
+   print(json.dumps(response, indent=2))
+   ```
+
+   - 수정 코드
+
+   ```python
+   import json
+   from ibm_watson import AssistantV2
+   from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+   
+   def authenticate(api_key):
+       authenticator = IAMAuthenticator(api_key)
+       return authenticator
+   
+   def set_assistant(authenticator):
+       assistant = AssistantV2(
+           version='2020-04-01',
+           authenticator= authenticator
+       )
+       return assistant
+   
+   def set_url(assistant, api_url):
+       assistant.set_service_url(api_url)
+       return assistant
+   
+   def get_response(assistant, a_id, text):
+       response = assistant.message_stateless(
+           assistant_id= a_id,
+           input={
+               'message_type': 'text',
+               'text': text
+           }
+       ).get_result()
+       texts = response['output']['generic'][0]['text']
+       return texts
+   ```
+
+   
+
+4. Watson의 TTS솔루션을 활용하여 연결된 데이터를 다시 음성으로 변환하는 모듈 개발
+
+   - 코드
+
+   ```python
+   from os.path import join, dirname
+   from ibm_watson import TextToSpeechV1
+   from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+   
+   def authenticate(k):
+       authenticator = IAMAuthenticator(k)
+       return authenticator
+   
+   def tts(a):
+       speech_to_text = TextToSpeechV1(authenticator=a)
+       return speech_to_text
+   
+   def set_url(tts, api_url):
+       tts.set_service_url(api_url)
+       return tts
+   
+   def start_tts(tts, filename, text):
+       with open(join(dirname(__file__), '../media/timeline_audio', filename), 'wb') as audio_file:
+           audio_file.write(
+               tts.synthesize(
+                   text,
+                   voice='en-US_MichaelV3Voice',
+                   accept='audio/wav'        
+               ).get_result().content)
+           
+   ```
+
+   
+
+5. 사용자가 서비스를 이용할 수 있도록 Django를 활용하여 웹으로 구현
